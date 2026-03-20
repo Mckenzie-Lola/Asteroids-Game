@@ -1,24 +1,26 @@
-// Game Entity Classes
-
-// Base class for game objects
+// Base Entity class
 class Entity {
-    constructor(x, y) {
+    constructor(x, y, radius) {
         this.x = x;
         this.y = y;
+        this.radius = radius;
         this.vx = 0;
         this.vy = 0;
-        this.angle = 0;
-        this.radius = 20;
+        this.toDelete = false;
     }
 
-    wrapScreen(width, height) {
-        if (this.x < -this.radius) this.x = width + this.radius;
-        if (this.x > width + this.radius) this.x = -this.radius;
-        if (this.y < -this.radius) this.y = height + this.radius;
-        if (this.y > height + this.radius) this.y = -this.radius;
+    update(dt, canvas) {
+        this.x += this.vx * dt * 60;
+        this.y += this.vy * dt * 60;
+
+        // Screen wrapping
+        if (this.x < -this.radius) this.x = canvas.width + this.radius;
+        if (this.x > canvas.width + this.radius) this.x = -this.radius;
+        if (this.y < -this.radius) this.y = canvas.height + this.radius;
+        if (this.y > canvas.height + this.radius) this.y = -this.radius;
     }
 
-    checkCollision(other) {
+    collidesWith(other) {
         const dx = this.x - other.x;
         const dy = this.y - other.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -26,51 +28,53 @@ class Entity {
     }
 }
 
-// Player Ship
+// Player ship
 class Ship extends Entity {
     constructor(x, y) {
-        super(x, y);
-        this.radius = 15;
-        this.rotation = 0;
+        super(x, y, 15);
+        this.angle = -Math.PI / 2;
         this.thrust = 0;
-        this.thrustPower = 0.15;
-        this.rotationSpeed = 0.08;
-        this.friction = 0.99;
-        this.maxSpeed = 8;
-
-        // Combat
-        this.canShoot = true;
+        this.rotation = 0;
+        this.shooting = false;
         this.shootCooldown = 0;
-        this.shootDelay = 15;
+        this.invincible = false;
+        this.invincibleTime = 0;
+        this.blinkTimer = 0;
 
         // Power-ups
-        this.hasRapidFire = false;
-        this.hasShield = false;
-        this.hasMultiShot = false;
-        this.rapidFireTimer = 0;
-        this.shieldTimer = 0;
-        this.multiShotTimer = 0;
+        this.rapidFire = false;
+        this.rapidFireTime = 0;
+        this.shield = false;
+        this.multiShot = false;
+        this.multiShotTime = 0;
 
-        // State
-        this.invincible = false;
-        this.invincibleTimer = 0;
-        this.destroyed = false;
+        this.maxSpeed = 8;
+        this.thrustPower = 0.3;
+        this.rotationSpeed = 0.08;
+        this.friction = 0.99;
     }
 
-    update(deltaTime, keys, width, height) {
+    update(dt, canvas, particleSystem) {
         // Rotation
-        if (keys['ArrowLeft']) {
-            this.rotation -= this.rotationSpeed;
-        }
-        if (keys['ArrowRight']) {
-            this.rotation += this.rotationSpeed;
-        }
+        this.angle += this.rotation * this.rotationSpeed;
 
         // Thrust
-        this.thrust = keys['ArrowUp'] ? 1 : 0;
         if (this.thrust > 0) {
-            this.vx += Math.cos(this.rotation) * this.thrustPower;
-            this.vy += Math.sin(this.rotation) * this.thrustPower;
+            this.vx += Math.cos(this.angle) * this.thrustPower;
+            this.vy += Math.sin(this.angle) * this.thrustPower;
+
+            // Create thrust particles
+            if (Math.random() < 0.5) {
+                const offsetDist = 12;
+                const particleX = this.x - Math.cos(this.angle) * offsetDist;
+                const particleY = this.y - Math.sin(this.angle) * offsetDist;
+                particleSystem.createThrustParticle(
+                    particleX,
+                    particleY,
+                    this.angle,
+                    { x: this.vx, y: this.vy }
+                );
+            }
         }
 
         // Apply friction
@@ -84,253 +88,235 @@ class Ship extends Entity {
             this.vy = (this.vy / speed) * this.maxSpeed;
         }
 
-        // Update position
-        this.x += this.vx;
-        this.y += this.vy;
-
-        // Wrap around screen
-        this.wrapScreen(width, height);
-
-        // Update shoot cooldown
+        // Update shooting cooldown
         if (this.shootCooldown > 0) {
-            this.shootCooldown -= deltaTime;
-            if (this.shootCooldown < 0) this.shootCooldown = 0;
-        }
-
-        // Update power-up timers
-        if (this.hasRapidFire) {
-            this.rapidFireTimer -= deltaTime;
-            if (this.rapidFireTimer <= 0) {
-                this.hasRapidFire = false;
-            }
-        }
-
-        if (this.hasShield) {
-            this.shieldTimer -= deltaTime;
-            if (this.shieldTimer <= 0) {
-                this.hasShield = false;
-            }
-        }
-
-        if (this.hasMultiShot) {
-            this.multiShotTimer -= deltaTime;
-            if (this.multiShotTimer <= 0) {
-                this.hasMultiShot = false;
-            }
+            this.shootCooldown -= dt;
         }
 
         // Update invincibility
         if (this.invincible) {
-            this.invincibleTimer -= deltaTime;
-            if (this.invincibleTimer <= 0) {
+            this.invincibleTime -= dt;
+            this.blinkTimer += dt;
+            if (this.invincibleTime <= 0) {
                 this.invincible = false;
             }
         }
+
+        // Update power-ups
+        if (this.rapidFire) {
+            this.rapidFireTime -= dt;
+            if (this.rapidFireTime <= 0) {
+                this.rapidFire = false;
+            }
+        }
+
+        if (this.multiShot) {
+            this.multiShotTime -= dt;
+            if (this.multiShotTime <= 0) {
+                this.multiShot = false;
+            }
+        }
+
+        super.update(dt, canvas);
     }
 
     shoot() {
+        const cooldown = this.rapidFire ? 0.1 : 0.25;
+        if (this.shootCooldown <= 0) {
+            this.shootCooldown = cooldown;
+            return true;
+        }
+        return false;
+    }
+
+    getBullets() {
         const bullets = [];
+        const speed = 10;
+        const offsetDist = 20;
 
-        if (this.shootCooldown > 0) return bullets;
-
-        const shootDelay = this.hasRapidFire ? 5 : 15;
-        this.shootCooldown = shootDelay;
-
-        if (this.hasMultiShot) {
-            // Shoot 3 bullets
-            const angles = [-0.2, 0, 0.2];
-            angles.forEach(offset => {
-                const angle = this.rotation + offset;
-                const bulletX = this.x + Math.cos(angle) * 20;
-                const bulletY = this.y + Math.sin(angle) * 20;
-                bullets.push(new Bullet(bulletX, bulletY, angle));
+        if (this.multiShot) {
+            // Fire 3 bullets in a spread
+            const angles = [this.angle - 0.2, this.angle, this.angle + 0.2];
+            angles.forEach(angle => {
+                const x = this.x + Math.cos(angle) * offsetDist;
+                const y = this.y + Math.sin(angle) * offsetDist;
+                const vx = Math.cos(angle) * speed + this.vx;
+                const vy = Math.sin(angle) * speed + this.vy;
+                bullets.push(new Bullet(x, y, vx, vy));
             });
         } else {
-            // Shoot 1 bullet
-            const bulletX = this.x + Math.cos(this.rotation) * 20;
-            const bulletY = this.y + Math.sin(this.rotation) * 20;
-            bullets.push(new Bullet(bulletX, bulletY, this.rotation));
+            const x = this.x + Math.cos(this.angle) * offsetDist;
+            const y = this.y + Math.sin(this.angle) * offsetDist;
+            const vx = Math.cos(this.angle) * speed + this.vx;
+            const vy = Math.sin(this.angle) * speed + this.vy;
+            bullets.push(new Bullet(x, y, vx, vy));
         }
 
         return bullets;
     }
 
-    hyperspace(width, height) {
-        // Random teleport with 20% chance of damage
-        this.x = Math.random() * width;
-        this.y = Math.random() * height;
-        this.vx = 0;
-        this.vy = 0;
-
-        return Math.random() < 0.2; // Return true if hyperspace damaged ship
-    }
-
-    activatePowerUp(type, duration = 300) {
-        if (type === 'rapidFire') {
-            this.hasRapidFire = true;
-            this.rapidFireTimer = duration;
-        } else if (type === 'shield') {
-            this.hasShield = true;
-            this.shieldTimer = duration;
-        } else if (type === 'multiShot') {
-            this.hasMultiShot = true;
-            this.multiShotTimer = duration;
-        }
-    }
-
-    draw(ctx, frame) {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rotation);
-
-        // Draw shield if active
-        if (this.hasShield) {
-            ctx.strokeStyle = '#00ffff';
-            ctx.lineWidth = 2;
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = '#00ffff';
-            const pulse = Math.sin(frame * 0.1) * 5;
-            ctx.beginPath();
-            ctx.arc(0, 0, 25 + pulse, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-
-        // Flashing when invincible
-        if (this.invincible && Math.floor(frame / 5) % 2 === 0) {
-            ctx.restore();
+    draw(ctx) {
+        // Don't draw if invincible and blinking
+        if (this.invincible && Math.floor(this.blinkTimer * 10) % 2 === 0) {
             return;
         }
 
-        // Draw ship with glow
-        ctx.strokeStyle = '#00ff00';
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+
+        // Draw shield
+        if (this.shield) {
+            ctx.strokeStyle = '#f0f';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#f0f';
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius + 5, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Draw ship
+        ctx.strokeStyle = '#0ff';
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
         ctx.lineWidth = 2;
         ctx.shadowBlur = 15;
-        ctx.shadowColor = '#00ff00';
+        ctx.shadowColor = '#0ff';
 
         ctx.beginPath();
         ctx.moveTo(15, 0);
-        ctx.lineTo(-10, -10);
-        ctx.lineTo(-5, 0);
-        ctx.lineTo(-10, 10);
+        ctx.lineTo(-10, -8);
+        ctx.lineTo(-6, 0);
+        ctx.lineTo(-10, 8);
         ctx.closePath();
+        ctx.fill();
         ctx.stroke();
 
-        // Inner detail
-        ctx.strokeStyle = '#00aa00';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(5, 0);
-        ctx.lineTo(-5, 0);
-        ctx.stroke();
+        // Draw thrust flame
+        if (this.thrust > 0) {
+            const flameLength = 10 + Math.random() * 5;
+            ctx.fillStyle = '#0ff';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#0ff';
+            ctx.beginPath();
+            ctx.moveTo(-6, -4);
+            ctx.lineTo(-6 - flameLength, 0);
+            ctx.lineTo(-6, 4);
+            ctx.closePath();
+            ctx.fill();
+        }
 
         ctx.restore();
+    }
+
+    makeInvincible(duration = 3) {
+        this.invincible = true;
+        this.invincibleTime = duration;
+        this.blinkTimer = 0;
+    }
+
+    activatePowerUp(type) {
+        switch (type) {
+            case 'rapidFire':
+                this.rapidFire = true;
+                this.rapidFireTime = 10;
+                break;
+            case 'shield':
+                this.shield = true;
+                break;
+            case 'multiShot':
+                this.multiShot = true;
+                this.multiShotTime = 10;
+                break;
+        }
+    }
+
+    removeShield() {
+        this.shield = false;
+    }
+
+    hyperspace(canvas) {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.vx = 0;
+        this.vy = 0;
+
+        // 20% chance of taking damage
+        return Math.random() < 0.2;
     }
 }
 
 // Bullet
 class Bullet extends Entity {
-    constructor(x, y, angle) {
-        super(x, y);
-        this.radius = 2;
-        this.speed = 10;
-        this.vx = Math.cos(angle) * this.speed;
-        this.vy = Math.sin(angle) * this.speed;
-        this.life = 60;
-        this.maxLife = 60;
+    constructor(x, y, vx, vy) {
+        super(x, y, 3);
+        this.vx = vx;
+        this.vy = vy;
+        this.life = 1.5;
+        this.age = 0;
     }
 
-    update(deltaTime, width, height) {
-        this.x += this.vx;
-        this.y += this.vy;
-        this.life -= deltaTime;
-        this.wrapScreen(width, height);
-    }
+    update(dt, canvas, particleSystem) {
+        super.update(dt, canvas);
+        this.age += dt;
 
-    isDead() {
-        return this.life <= 0;
+        // Create trail
+        if (Math.random() < 0.3) {
+            particleSystem.createBulletTrail(this.x, this.y, this.vx, this.vy);
+        }
+
+        if (this.age > this.life) {
+            this.toDelete = true;
+        }
     }
 
     draw(ctx) {
-        const alpha = this.life / this.maxLife;
+        const alpha = 1 - (this.age / this.life) * 0.5;
         ctx.save();
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = '#00ffff';
+        ctx.fillStyle = '#0ff';
         ctx.shadowBlur = 10;
-        ctx.shadowColor = '#00ffff';
-
+        ctx.shadowColor = '#0ff';
         ctx.beginPath();
-        ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fill();
-
         ctx.restore();
     }
 }
 
 // Asteroid
 class Asteroid extends Entity {
-    constructor(x, y, size = 'large') {
-        super(x, y);
+    constructor(x, y, size = 3) {
+        const radii = { 3: 40, 2: 25, 1: 15 };
+        super(x, y, radii[size]);
         this.size = size;
-
-        // Set properties based on size
-        if (size === 'large') {
-            this.radius = 40;
-            this.points = 100;
-            this.health = 3;
-        } else if (size === 'medium') {
-            this.radius = 25;
-            this.points = 50;
-            this.health = 2;
-        } else {
-            this.radius = 15;
-            this.points = 20;
-            this.health = 1;
-        }
 
         // Random velocity
         const angle = Math.random() * Math.PI * 2;
-        const speed = Math.random() * 2 + 1;
+        const speed = (4 - size) * 0.5 + Math.random() * 0.5;
         this.vx = Math.cos(angle) * speed;
         this.vy = Math.sin(angle) * speed;
 
-        // Rotation
-        this.rotationSpeed = (Math.random() - 0.5) * 0.05;
+        // Random rotation
         this.angle = Math.random() * Math.PI * 2;
+        this.rotationSpeed = (Math.random() - 0.5) * 0.05;
 
-        // Shape (irregular polygon)
-        this.vertices = [];
-        const vertexCount = Math.floor(Math.random() * 4) + 8;
-        for (let i = 0; i < vertexCount; i++) {
-            const angle = (Math.PI * 2 / vertexCount) * i;
-            const variation = this.radius * (Math.random() * 0.3 + 0.7);
-            this.vertices.push({
-                x: Math.cos(angle) * variation,
-                y: Math.sin(angle) * variation
+        // Random shape
+        this.points = [];
+        const numPoints = 8 + Math.floor(Math.random() * 4);
+        for (let i = 0; i < numPoints; i++) {
+            const angle = (Math.PI * 2 * i) / numPoints;
+            const variance = 0.3 + Math.random() * 0.4;
+            this.points.push({
+                angle: angle,
+                distance: this.radius * variance
             });
         }
     }
 
-    update(deltaTime, width, height) {
-        this.x += this.vx;
-        this.y += this.vy;
+    update(dt, canvas) {
+        super.update(dt, canvas);
         this.angle += this.rotationSpeed;
-        this.wrapScreen(width, height);
-    }
-
-    split() {
-        const children = [];
-        if (this.size === 'large') {
-            for (let i = 0; i < 2; i++) {
-                const asteroid = new Asteroid(this.x, this.y, 'medium');
-                children.push(asteroid);
-            }
-        } else if (this.size === 'medium') {
-            for (let i = 0; i < 2; i++) {
-                const asteroid = new Asteroid(this.x, this.y, 'small');
-                children.push(asteroid);
-            }
-        }
-        return children;
     }
 
     draw(ctx) {
@@ -338,79 +324,115 @@ class Asteroid extends Entity {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.angle);
 
-        ctx.strokeStyle = '#888888';
+        ctx.strokeStyle = '#0ff';
         ctx.lineWidth = 2;
         ctx.shadowBlur = 10;
-        ctx.shadowColor = '#888888';
+        ctx.shadowColor = '#0ff';
 
         ctx.beginPath();
-        ctx.moveTo(this.vertices[0].x, this.vertices[0].y);
-        for (let i = 1; i < this.vertices.length; i++) {
-            ctx.lineTo(this.vertices[i].x, this.vertices[i].y);
-        }
+        this.points.forEach((point, i) => {
+            const x = Math.cos(point.angle) * (this.radius + point.distance);
+            const y = Math.sin(point.angle) * (this.radius + point.distance);
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
         ctx.closePath();
         ctx.stroke();
 
         ctx.restore();
+    }
+
+    split() {
+        if (this.size > 1) {
+            const newAsteroids = [];
+            for (let i = 0; i < 2; i++) {
+                const asteroid = new Asteroid(this.x, this.y, this.size - 1);
+                // Give them a bit of separation
+                const angle = Math.random() * Math.PI * 2;
+                asteroid.vx += Math.cos(angle) * 2;
+                asteroid.vy += Math.sin(angle) * 2;
+                newAsteroids.push(asteroid);
+            }
+            return newAsteroids;
+        }
+        return [];
+    }
+
+    getScore() {
+        return [100, 50, 20][this.size - 1];
     }
 }
 
 // Power-up
 class PowerUp extends Entity {
     constructor(x, y, type) {
-        super(x, y);
-        this.radius = 12;
-        this.type = type; // 'rapidFire', 'shield', 'multiShot'
-        this.life = 300; // Disappears after 5 seconds
-        this.bobPhase = Math.random() * Math.PI * 2;
+        super(x, y, 12);
+        this.type = type;
+        this.life = 10;
+        this.age = 0;
+        this.pulseTimer = 0;
 
-        // Set color based on type
-        if (type === 'rapidFire') {
-            this.color = '#ff0000';
-            this.symbol = 'R';
-        } else if (type === 'shield') {
-            this.color = '#00ffff';
-            this.symbol = 'S';
-        } else if (type === 'multiShot') {
-            this.color = '#ff00ff';
-            this.symbol = 'M';
+        // Slow drift
+        const angle = Math.random() * Math.PI * 2;
+        this.vx = Math.cos(angle) * 0.5;
+        this.vy = Math.sin(angle) * 0.5;
+
+        // Power-up colors and symbols
+        this.config = {
+            rapidFire: { color: '#ff0', symbol: 'R' },
+            shield: { color: '#f0f', symbol: 'S' },
+            multiShot: { color: '#0f0', symbol: 'M' }
+        }[type];
+    }
+
+    update(dt, canvas) {
+        super.update(dt, canvas);
+        this.age += dt;
+        this.pulseTimer += dt;
+
+        if (this.age > this.life) {
+            this.toDelete = true;
         }
     }
 
-    update(deltaTime, width, height) {
-        this.life -= deltaTime;
-        this.bobPhase += 0.05;
-        this.wrapScreen(width, height);
-    }
-
-    isDead() {
-        return this.life <= 0;
-    }
-
     draw(ctx) {
-        const bob = Math.sin(this.bobPhase) * 5;
-        const alpha = this.life < 60 ? this.life / 60 : 1;
+        const pulse = Math.sin(this.pulseTimer * 5) * 0.3 + 0.7;
+        const alpha = Math.max(0, 1 - (this.age / this.life) * 0.5);
 
         ctx.save();
         ctx.globalAlpha = alpha;
-        ctx.translate(this.x, this.y + bob);
 
         // Outer glow
-        ctx.strokeStyle = this.color;
+        ctx.strokeStyle = this.config.color;
         ctx.lineWidth = 2;
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 20 * pulse;
+        ctx.shadowColor = this.config.color;
 
+        // Draw hexagon
         ctx.beginPath();
-        ctx.arc(0, 0, 15, 0, Math.PI * 2);
+        for (let i = 0; i < 6; i++) {
+            const angle = (Math.PI * 2 * i) / 6;
+            const x = this.x + Math.cos(angle) * this.radius * pulse;
+            const y = this.y + Math.sin(angle) * this.radius * pulse;
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.closePath();
         ctx.stroke();
 
-        // Symbol
-        ctx.fillStyle = this.color;
+        // Draw symbol
+        ctx.fillStyle = this.config.color;
         ctx.font = 'bold 16px Courier New';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(this.symbol, 0, 0);
+        ctx.shadowBlur = 10;
+        ctx.fillText(this.config.symbol, this.x, this.y);
 
         ctx.restore();
     }
@@ -418,98 +440,141 @@ class PowerUp extends Entity {
 
 // UFO Enemy
 class UFO extends Entity {
-    constructor(x, y, width, height) {
-        super(x, y);
-        this.radius = 20;
-        this.width = width;
-        this.height = height;
+    constructor(x, y, canvas) {
+        super(x, y, 20);
+        this.canvas = canvas;
+        this.targetX = Math.random() * canvas.width;
+        this.targetY = Math.random() * canvas.height;
         this.speed = 2;
-        this.vx = this.speed;
-        this.vy = 0;
+        this.shootCooldown = 0;
+        this.shootInterval = 2;
+        this.direction = Math.random() < 0.5 ? -1 : 1;
         this.changeDirectionTimer = 0;
-        this.shootTimer = 0;
-        this.shootDelay = 60;
-        this.points = 200;
+        this.health = 2;
     }
 
-    update(deltaTime, playerX, playerY) {
-        // Move
-        this.x += this.vx;
-        this.y += this.vy;
-
-        // Change direction occasionally
-        this.changeDirectionTimer -= deltaTime;
-        if (this.changeDirectionTimer <= 0) {
-            this.changeDirectionTimer = 60 + Math.random() * 60;
-            this.vx = (Math.random() - 0.5) * this.speed * 2;
-            this.vy = (Math.random() - 0.5) * this.speed * 2;
+    update(dt, canvas, ship) {
+        // Change direction periodically
+        this.changeDirectionTimer += dt;
+        if (this.changeDirectionTimer > 2) {
+            this.changeDirectionTimer = 0;
+            this.targetX = Math.random() * canvas.width;
+            this.targetY = Math.random() * canvas.height;
         }
 
-        // Wrap around screen
-        this.wrapScreen(this.width, this.height);
+        // Move towards target
+        const dx = this.targetX - this.x;
+        const dy = this.targetY - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Update shoot timer
-        this.shootTimer -= deltaTime;
+        if (distance > 5) {
+            this.vx = (dx / distance) * this.speed;
+            this.vy = (dy / distance) * this.speed;
+        }
+
+        // Shooting
+        this.shootCooldown -= dt;
+
+        super.update(dt, canvas);
     }
 
     canShoot() {
-        return this.shootTimer <= 0;
+        if (this.shootCooldown <= 0) {
+            this.shootCooldown = this.shootInterval;
+            return true;
+        }
+        return false;
     }
 
-    shoot(playerX, playerY) {
-        if (!this.canShoot()) return null;
+    shootAt(ship) {
+        const dx = ship.x - this.x;
+        const dy = ship.y - this.y;
+        const angle = Math.atan2(dy, dx);
 
-        this.shootTimer = this.shootDelay;
+        // Add some inaccuracy
+        const inaccuracy = (Math.random() - 0.5) * 0.3;
+        const finalAngle = angle + inaccuracy;
 
-        // Aim at player with some inaccuracy
-        const dx = playerX - this.x;
-        const dy = playerY - this.y;
-        const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.5;
+        const speed = 6;
+        const vx = Math.cos(finalAngle) * speed;
+        const vy = Math.sin(finalAngle) * speed;
 
-        return new Bullet(this.x, this.y, angle);
+        return new UFOBullet(this.x, this.y, vx, vy);
     }
 
-    draw(ctx, frame) {
+    draw(ctx) {
         ctx.save();
         ctx.translate(this.x, this.y);
 
-        // UFO body with glow
-        ctx.strokeStyle = '#ff00ff';
+        // Draw UFO body
+        ctx.strokeStyle = '#f00';
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
         ctx.lineWidth = 2;
         ctx.shadowBlur = 15;
-        ctx.shadowColor = '#ff00ff';
+        ctx.shadowColor = '#f00';
 
         // Top dome
         ctx.beginPath();
-        ctx.arc(0, -5, 8, Math.PI, 0, false);
+        ctx.arc(0, -5, 8, 0, Math.PI, true);
         ctx.stroke();
 
         // Middle section
         ctx.beginPath();
-        ctx.moveTo(-15, -5);
-        ctx.lineTo(-10, 5);
-        ctx.lineTo(10, 5);
-        ctx.lineTo(15, -5);
+        ctx.moveTo(-15, 0);
+        ctx.lineTo(-8, -5);
+        ctx.lineTo(8, -5);
+        ctx.lineTo(15, 0);
+        ctx.lineTo(8, 5);
+        ctx.lineTo(-8, 5);
         ctx.closePath();
+        ctx.fill();
         ctx.stroke();
 
-        // Bottom
+        // Bottom dome
         ctx.beginPath();
-        ctx.moveTo(-10, 5);
-        ctx.lineTo(10, 5);
+        ctx.arc(0, 5, 8, 0, Math.PI);
         ctx.stroke();
 
-        // Lights (blinking)
-        if (Math.floor(frame / 10) % 2 === 0) {
-            ctx.fillStyle = '#ffff00';
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = '#ffff00';
-            ctx.beginPath();
-            ctx.arc(-8, 0, 2, 0, Math.PI * 2);
-            ctx.arc(8, 0, 2, 0, Math.PI * 2);
-            ctx.fill();
-        }
+        ctx.restore();
+    }
 
+    hit() {
+        this.health--;
+        return this.health <= 0;
+    }
+
+    getScore() {
+        return 200;
+    }
+}
+
+// UFO Bullet
+class UFOBullet extends Entity {
+    constructor(x, y, vx, vy) {
+        super(x, y, 3);
+        this.vx = vx;
+        this.vy = vy;
+        this.life = 2;
+        this.age = 0;
+    }
+
+    update(dt, canvas, particleSystem) {
+        super.update(dt, canvas);
+        this.age += dt;
+
+        if (this.age > this.life) {
+            this.toDelete = true;
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.fillStyle = '#f00';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#f00';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
     }
 }
