@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asteroids - Neon Edition</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #000000;
+            font-family: 'Courier New', monospace;
+            color: #00ff00;
+        }
+
+        #gameCanvas {
+            display: block;
+            background: #000000;
+            cursor: crosshair;
+        }
+
+        .ui-overlay {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .ui-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .score-panel, .lives-panel, .combo-panel {
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #00ff00;
+            padding: 15px 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+        }
+
+        .score-panel h2, .lives-panel h2, .combo-panel h2 {
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: #00ff00;
+            text-transform: uppercase;
+        }
+
+        .score-value, .lives-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #00ff00;
+            text-shadow: 0 0 10px #00ff00;
+        }
+
+        .high-score {
+            font-size: 12px;
+            color: #00aa00;
+            margin-top: 5px;
+        }
+
+        .combo-panel {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-color: #ff00ff;
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+            display: none;
+        }
+
+        .combo-panel.active {
+            display: block;
+            animation: pulse 0.5s ease-in-out infinite;
+        }
+
+        .combo-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ff00ff;
+            text-shadow: 0 0 10px #ff00ff;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.1); }
+        }
+
+        .menu-screen, .game-over-screen, .pause-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            pointer-events: auto;
+        }
+
+        .menu-screen.hidden, .game-over-screen.hidden, .pause-screen.hidden {
+            display: none;
+        }
+
+        .menu-title {
+            font-size: 72px;
+            font-weight: bold;
+            color: #00ff00;
+            text-shadow: 0 0 30px #00ff00;
+            margin-bottom: 40px;
+            animation: glow 2s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { text-shadow: 0 0 30px #00ff00; }
+            50% { text-shadow: 0 0 60px #00ff00, 0 0 90px #00ff00; }
+        }
+
+        .menu-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .menu-button {
+            background: transparent;
+            border: 3px solid #00ff00;
+            color: #00ff00;
+            padding: 15px 40px;
+            font-size: 24px;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+        }
+
+        .menu-button:hover {
+            background: #00ff00;
+            color: #000000;
+            box-shadow: 0 0 40px rgba(0, 255, 0, 0.8);
+            transform: scale(1.05);
+        }
+
+        .controls-list {
+            margin-top: 40px;
+            text-align: left;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #00ff00;
+            padding: 20px 30px;
+            border-radius: 5px;
+        }
+
+        .controls-list h3 {
+            font-size: 20px;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #00ff00;
+        }
+
+        .controls-list p {
+            font-size: 16px;
+            margin: 8px 0;
+            color: #00aa00;
+        }
+
+        .controls-list span {
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        .game-over-title {
+            font-size: 64px;
+            font-weight: bold;
+            color: #ff0000;
+            text-shadow: 0 0 30px #ff0000;
+            margin-bottom: 30px;
+        }
+
+        .final-score {
+            font-size: 36px;
+            color: #00ff00;
+            margin-bottom: 40px;
+        }
+
+        .power-up-indicator {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            pointer-events: none;
+        }
+
+        .power-up-item {
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #ffff00;
+            padding: 10px 15px;
+            border-radius: 5px;
+            color: #ffff00;
+            font-size: 14px;
+            box-shadow: 0 0 20px rgba(255, 255, 0, 0.5);
+            display: none;
+        }
+
+        .power-up-item.active {
+            display: block;
+            animation: powerUpPulse 1s ease-in-out infinite;
+        }
+
+        @keyframes powerUpPulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 255, 0, 0.5); }
+            50% { box-shadow: 0 0 40px rgba(255, 255, 0, 0.8); }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Overlay -->
+    <div class="ui-overlay">
+        <div class="ui-top">
+            <div class="score-panel">
+                <h2>Score</h2>
+                <div class="score-value" id="score">0</div>
+                <div class="high-score">High: <span id="highScore">0</span></div>
+            </div>
+            <div class="lives-panel">
+                <h2>Lives</h2>
+                <div class="lives-value" id="lives">3</div>
+            </div>
+        </div>
+
+        <div class="combo-panel" id="comboPanel">
+            <h2>Combo</h2>
+            <div class="combo-value" id="comboValue">x2</div>
+        </div>
+    </div>
+
+    <!-- Power-up Indicators -->
+    <div class="power-up-indicator">
+        <div class="power-up-item" id="rapidFireIndicator">RAPID FIRE</div>
+        <div class="power-up-item" id="shieldIndicator">SHIELD</div>
+        <div class="power-up-item" id="multiShotIndicator">MULTI-SHOT</div>
+    </div>
+
+    <!-- Menu Screen -->
+    <div class="menu-screen" id="menuScreen">
+        <div class="menu-title">ASTEROIDS</div>
+        <div class="menu-buttons">
+            <button class="menu-button" onclick="startGame()">Start Game</button>
+        </div>
+        <div class="controls-list">
+            <h3>Controls</h3>
+            <p><span>↑</span> Thrust Forward</p>
+            <p><span>← →</span> Rotate Ship</p>
+            <p><span>SPACE</span> Shoot</p>
+            <p><span>SHIFT</span> Hyperspace</p>
+            <p><span>P</span> Pause</p>
+        </div>
+    </div>
+
+    <!-- Pause Screen -->
+    <div class="pause-screen hidden" id="pauseScreen">
+        <div class="menu-title">PAUSED</div>
+        <div class="menu-buttons">
+            <button class="menu-button" onclick="resumeGame()">Resume</button>
+            <button class="menu-button" onclick="returnToMenu()">Main Menu</button>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div class="game-over-screen hidden" id="gameOverScreen">
+        <div class="game-over-title">GAME OVER</div>
+        <div class="final-score">Final Score: <span id="finalScore">0</span></div>
+        <div class="menu-buttons">
+            <button class="menu-button" onclick="restartGame()">Play Again</button>
+            <button class="menu-button" onclick="returnToMenu()">Main Menu</button>
+        </div>
+    </div>
+
+    <script src="particles.js"></script>
+    <script src="entities.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
