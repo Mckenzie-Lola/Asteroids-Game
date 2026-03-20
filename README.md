@@ -108,16 +108,14 @@ If you have Git installed and want to clone the repository:
 
 4. **Navigate into the folder**:
    ```bash
-   cd Asteroids-Game/asteroids-game
+   cd Asteroids-Game
    ```
 
 5. **Open the game**:
-   - Double-click `index.html`, or
-   - Run a local server (optional):
-     ```bash
-     python -m http.server 8000
-     ```
-     Then open `http://localhost:8000` in your browser
+   ```bash
+   open index.html
+   ```
+   This will open the game directly in your default web browser
 
 ### Requirements
 
