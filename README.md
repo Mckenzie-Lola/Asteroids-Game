@@ -83,6 +83,7 @@ asteroids-game/
 ├── game.js         # Game loop, state management, collision detection
 ├── entities.js     # All game object classes (Ship, Asteroid, Bullet, etc.)
 ├── particles.js    # Particle system and visual effects
+├── prompt.md       # Original prompt used to generate this game
 └── README.md       # This file
 ```
 
