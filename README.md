@@ -68,6 +68,63 @@ A modern, polished recreation of the classic Asteroids arcade game with dynamic 
 - **UFO**: 200 points
 - All scores multiplied by current combo multiplier
 
+## Getting Started
+
+### Option 1: Download Without Git (Easiest for Beginners)
+
+If you're new to GitHub or don't have Git installed, follow these simple steps:
+
+1. **Download the code**:
+   - Click the green **"Code"** button at the top of this GitHub page
+   - Select **"Download ZIP"** from the dropdown menu
+   - Save the ZIP file to your computer
+
+2. **Extract the files**:
+   - Find the downloaded ZIP file (usually in your Downloads folder)
+   - Right-click the file and select "Extract All" (Windows) or double-click it (Mac)
+   - Choose where you want to save the extracted folder
+
+3. **Open the game**:
+   - Navigate to the extracted `asteroids-game` folder
+   - Find the file named `index.html`
+   - Double-click `index.html` to open it in your web browser
+   - Click "Start Game" and enjoy!
+
+### Option 2: Clone With Git (For Developers)
+
+If you have Git installed and want to clone the repository:
+
+1. **Open your terminal or command prompt**
+
+2. **Navigate to where you want to save the game**:
+   ```bash
+   cd /path/to/your/desired/folder
+   ```
+
+3. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Mckenzie-Lola/Asteroids-Game.git
+   ```
+
+4. **Navigate into the folder**:
+   ```bash
+   cd Asteroids-Game/asteroids-game
+   ```
+
+5. **Open the game**:
+   - Double-click `index.html`, or
+   - Run a local server (optional):
+     ```bash
+     python -m http.server 8000
+     ```
+     Then open `http://localhost:8000` in your browser
+
+### Requirements
+
+- **Any modern web browser** (Chrome, Firefox, Safari, or Edge)
+- **No installation needed** - it runs directly in your browser!
+- **No internet connection required** after downloading
+
 ## Technical Details
 
 ### Architecture
